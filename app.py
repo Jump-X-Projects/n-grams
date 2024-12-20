@@ -124,9 +124,20 @@ def main():
                 if len(results_df) > 0:
                     st.header("3. Results")
                     
+                    # Add search/filter box
+                    search_term = st.text_input("Filter N-grams (case-insensitive)", "")
+                    
+                    # Filter results if search term is provided
+                    if search_term:
+                        filtered_df = results_df[results_df['N-gram'].str.contains(search_term.lower(), case=False, na=False)]
+                        display_df = filtered_df
+                        st.write(f"Found {len(filtered_df)} matching n-grams")
+                    else:
+                        display_df = results_df
+                    
                     # Display the dataframe
                     st.dataframe(
-                        results_df,
+                        display_df,
                         hide_index=True,
                         column_config={
                             'N-gram': st.column_config.TextColumn('N-gram'),
@@ -144,7 +155,7 @@ def main():
                     )
                     
                     # Create basic visualization
-                    fig = px.bar(results_df.head(20), 
+                    fig = px.bar(display_df.head(20), 
                                x='N-gram', 
                                y='CPA',
                                title=f'Top 20 {n_value}-grams by CPA')
@@ -154,7 +165,7 @@ def main():
                     # Download results
                     st.download_button(
                         label="Download results as CSV",
-                        data=results_df.to_csv(index=False),
+                        data=display_df.to_csv(index=False),
                         file_name=f"{n_value}-grams_analysis.csv",
                         mime="text/csv"
                     )
