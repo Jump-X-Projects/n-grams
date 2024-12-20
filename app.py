@@ -4,23 +4,6 @@ from collections import Counter
 import plotly.express as px
 import re
 
-# Hide Streamlit Menu and Footer
-st.set_page_config(
-    page_title="N-grams Analysis",
-    layout="wide",
-    initial_sidebar_state="auto",
-    menu_items=None
-)
-
-# Hide the footer and menu
-hide_streamlit_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            </style>
-            """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
 def load_data(uploaded_file):
     """Load and validate the uploaded search terms report."""
     if uploaded_file is not None:
@@ -91,7 +74,7 @@ def analyze_ngrams(df, n_value, min_frequency=1):
         return pd.DataFrame(columns=['N-gram', 'Frequency', 'Total Cost', 'Total Conversions', 'CPA'])
 
 def main():
-    st.title("Search Terms N-grams Analysis with CPA")
+    st.title("Search Terms N-grams Analysis")
     
     # File upload
     st.header("1. Upload Search Terms Report")
