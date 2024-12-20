@@ -74,7 +74,7 @@ def analyze_ngrams(df, n_value, min_frequency=1):
         return pd.DataFrame(columns=['N-gram', 'Frequency', 'Total Cost', 'Total Conversions', 'CPA'])
 
 def main():
-    st.title("Search Terms N-grams Analysis with CPA")
+    st.title("Search Terms N-grams Analysis")
     
     # File upload
     st.header("1. Upload Search Terms Report")
