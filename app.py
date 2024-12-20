@@ -3,7 +3,6 @@ import pandas as pd
 from collections import Counter
 import plotly.express as px
 import re
-from st_aggrid import AgGrid, GridOptionsBuilder
 
 def load_data(uploaded_file):
     """Load and validate the uploaded search terms report."""
@@ -74,31 +73,6 @@ def analyze_ngrams(df, n_value, min_frequency=1):
     else:
         return pd.DataFrame(columns=['N-gram', 'Frequency', 'Total Cost', 'Total Conversions', 'CPA'])
 
-def show_interactive_grid(df):
-    """Display an interactive grid with sorting and filtering."""
-    gb = GridOptionsBuilder.from_dataframe(df)
-    
-    # Simpler configuration that should work more reliably
-    gb.configure_column('N-gram', sortable=True, filter=True)
-    gb.configure_column('Frequency', sortable=True, filter=True)
-    gb.configure_column('Total Cost', sortable=True, filter=True)
-    gb.configure_column('Total Conversions', sortable=True, filter=True)
-    gb.configure_column('CPA', sortable=True, filter=True)
-    
-    # Basic grid configuration
-    gb.configure_grid_options(domLayout='normal')
-    
-    grid_response = AgGrid(
-        df,
-        gridOptions=gb.build(),
-        reload_data=False,
-        enable_enterprise_modules=False,
-        height=400,
-        fit_columns_on_grid_load=True,
-    )
-    
-    return grid_response
-
 def main():
     st.title("Search Terms N-grams Analysis with CPA")
     
@@ -132,9 +106,42 @@ def main():
                 if len(results_df) > 0:
                     st.header("3. Results")
                     
-                    # Display interactive grid
-                    st.subheader("Top N-grams with CPA")
-                    grid_response = show_interactive_grid(results_df)
+                    # Sorting options
+                    sort_column = st.selectbox(
+                        "Sort by",
+                        options=['Frequency', 'Total Cost', 'Total Conversions', 'CPA'],
+                        index=0
+                    )
+                    sort_order = st.radio(
+                        "Sort order",
+                        options=['Descending', 'Ascending'],
+                        horizontal=True
+                    )
+                    
+                    # Sort the dataframe
+                    results_df = results_df.sort_values(
+                        by=sort_column,
+                        ascending=(sort_order == 'Ascending')
+                    )
+                    
+                    # Display the dataframe
+                    st.dataframe(
+                        results_df,
+                        hide_index=True,
+                        column_config={
+                            'N-gram': st.column_config.TextColumn('N-gram'),
+                            'Frequency': st.column_config.NumberColumn('Frequency'),
+                            'Total Cost': st.column_config.NumberColumn(
+                                'Total Cost',
+                                format="$%.2f"
+                            ),
+                            'Total Conversions': st.column_config.NumberColumn('Total Conversions'),
+                            'CPA': st.column_config.NumberColumn(
+                                'CPA',
+                                format="$%.2f"
+                            )
+                        }
+                    )
                     
                     # Create visualization
                     st.subheader("Visualization")
