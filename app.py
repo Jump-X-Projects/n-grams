@@ -3,6 +3,8 @@ import pandas as pd
 from collections import Counter
 import plotly.express as px
 import re
+from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid.grid_options_builder import GridOptionsBuilder
 
 def load_data(uploaded_file):
     """Load and validate the uploaded search terms report."""
@@ -73,8 +75,41 @@ def analyze_ngrams(df, n_value, min_frequency=1):
     else:
         return pd.DataFrame(columns=['N-gram', 'Frequency', 'Total Cost', 'Total Conversions', 'CPA'])
 
+def show_interactive_grid(df):
+    """Display an interactive grid with sorting and filtering."""
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_default_column(
+        groupable=True,
+        value=True,
+        enableRowGroup=True,
+        editable=False,
+        filterable=True,
+        sortable=True,
+        resizable=True,
+    )
+    
+    # Configure specific columns
+    gb.configure_column('N-gram', filter=True, headerCheckboxSelection=True)
+    gb.configure_column('Frequency', type=['numericColumn', 'numberColumnFilter'])
+    gb.configure_column('Total Cost', type=['numericColumn', 'numberColumnFilter'], precision=2)
+    gb.configure_column('Total Conversions', type=['numericColumn', 'numberColumnFilter'])
+    gb.configure_column('CPA', type=['numericColumn', 'numberColumnFilter'], precision=2)
+    
+    grid_options = gb.build()
+    
+    return AgGrid(
+        df,
+        gridOptions=grid_options,
+        enable_enterprise_modules=False,
+        allow_unsafe_jscode=True,
+        height=400
+    )
+
 def main():
     st.title("Search Terms N-grams Analysis with CPA")
+    
+    # Add requirement for st-aggrid in the UI
+    st.write("Note: This app requires the 'st-aggrid' package. Add it to requirements.txt if not already present.")
     
     # File upload
     st.header("1. Upload Search Terms Report")
@@ -106,38 +141,35 @@ def main():
                 if len(results_df) > 0:
                     st.header("3. Results")
                     
-                    # Display results table
-                    st.subheader("Top N-grams with CPA")
-                    # Format CPA and cost columns
-                    results_df['CPA'] = results_df['CPA'].round(2)
-                    results_df['Total Cost'] = results_df['Total Cost'].round(2)
-                    st.dataframe(results_df)
+                    # Display interactive grid
+                    st.subheader("Top N-grams with CPA (Sortable and Filterable)")
+                    grid_response = show_interactive_grid(results_df)
                     
                     # Create visualization
-                    if len(results_df) > 0:
-                        metric_options = ['Frequency', 'CPA', 'Total Cost', 'Total Conversions']
-                        selected_metric = st.selectbox("Select metric to visualize", metric_options)
-                        
-                        top_n = st.slider("Select top N results to visualize", 
-                                        min_value=5, 
-                                        max_value=min(50, len(results_df)), 
-                                        value=20)
-                        
-                        plot_data = results_df.head(top_n)
-                        fig = px.bar(plot_data, 
-                                   x='N-gram', 
-                                   y=selected_metric,
-                                   title=f'Top {top_n} {n_value}-grams by {selected_metric}')
-                        fig.update_layout(xaxis_tickangle=-45)
-                        st.plotly_chart(fig)
-                        
-                        # Download results
-                        st.download_button(
-                            label="Download results as CSV",
-                            data=results_df.to_csv(index=False),
-                            file_name=f"{n_value}-grams_analysis.csv",
-                            mime="text/csv"
-                        )
+                    st.subheader("Visualization")
+                    metric_options = ['Frequency', 'CPA', 'Total Cost', 'Total Conversions']
+                    selected_metric = st.selectbox("Select metric to visualize", metric_options)
+                    
+                    top_n = st.slider("Select top N results to visualize", 
+                                    min_value=5, 
+                                    max_value=min(50, len(results_df)), 
+                                    value=20)
+                    
+                    plot_data = results_df.head(top_n)
+                    fig = px.bar(plot_data, 
+                               x='N-gram', 
+                               y=selected_metric,
+                               title=f'Top {top_n} {n_value}-grams by {selected_metric}')
+                    fig.update_layout(xaxis_tickangle=-45)
+                    st.plotly_chart(fig)
+                    
+                    # Download results
+                    st.download_button(
+                        label="Download results as CSV",
+                        data=results_df.to_csv(index=False),
+                        file_name=f"{n_value}-grams_analysis.csv",
+                        mime="text/csv"
+                    )
                 else:
                     st.warning("No n-grams found with the specified parameters.")
 
