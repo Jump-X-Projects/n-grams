@@ -89,14 +89,12 @@ def analyze_ngrams(df, n_value, min_frequency=1):
     else:
         return pd.DataFrame(columns=['N-gram', 'Frequency', 'Total Cost', 'Total Conversions', 'CPA'])
 
-def filter_dataframe(df, search_term):
-    """Filter dataframe based on search term."""
-    if search_term:
-        return df[df['N-gram'].str.contains(search_term.lower(), case=False, na=False)]
-    return df
-
 def main():
     st.title("Search Terms N-grams Analysis")
+    
+    # Initialize session state
+    if 'results_df' not in st.session_state:
+        st.session_state.results_df = None
     
     # File upload
     st.header("1. Upload Search Terms Report")
@@ -125,65 +123,62 @@ def main():
             # Perform analysis
             if st.button("Analyze N-grams"):
                 with st.spinner("Analyzing n-grams..."):
-                    results_df = analyze_ngrams(df, n_value, min_frequency)
+                    st.session_state.results_df = analyze_ngrams(df, n_value, min_frequency)
+            
+            # Only show results if we have analyzed data
+            if st.session_state.results_df is not None and not st.session_state.results_df.empty:
+                st.header("3. Results")
                 
-                if len(results_df) > 0:
-                    st.header("3. Results")
-                    
-                    # Store results in session state
-                    if 'results_df' not in st.session_state:
-                        st.session_state['results_df'] = results_df
-                    
-                    # Add search/filter box
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        search_term = st.text_input(
-                            "Filter N-grams (case-insensitive)",
-                            key="search_input",
-                            on_change=None
+                # Add filter box
+                filter_text = st.text_input("Filter N-grams (type to search)")
+                
+                # Apply filter
+                if filter_text:
+                    filtered_df = st.session_state.results_df[
+                        st.session_state.results_df['N-gram'].str.contains(
+                            filter_text.lower(), 
+                            case=False, 
+                            na=False
                         )
-                    
-                    # Filter results if search term is provided
-                    display_df = filter_dataframe(st.session_state['results_df'], search_term)
-                    if search_term:
-                        st.write(f"Found {len(display_df)} matching n-grams")
-                    
-                    # Display the dataframe
-                    st.dataframe(
-                        display_df,
-                        hide_index=True,
-                        column_config={
-                            'N-gram': st.column_config.TextColumn('N-gram'),
-                            'Frequency': st.column_config.NumberColumn('Frequency'),
-                            'Total Cost': st.column_config.NumberColumn(
-                                'Total Cost',
-                                format="$%.2f"
-                            ),
-                            'Total Conversions': st.column_config.NumberColumn('Total Conversions'),
-                            'CPA': st.column_config.NumberColumn(
-                                'CPA',
-                                format="$%.2f"
-                            )
-                        }
-                    )
-                    
-                    # Create basic visualization
-                    fig = px.bar(display_df.head(20), 
-                               x='N-gram', 
-                               y='CPA',
-                               title=f'Top 20 {n_value}-grams by CPA')
-                    fig.update_layout(xaxis_tickangle=-45)
-                    st.plotly_chart(fig)
-                    
-                    # Download results
-                    st.download_button(
-                        label="Download filtered results as CSV",
-                        data=display_df.to_csv(index=False),
-                        file_name=f"{n_value}-grams_analysis.csv",
-                        mime="text/csv"
-                    )
+                    ]
+                    st.write(f"Found {len(filtered_df)} matching n-grams")
                 else:
-                    st.warning("No n-grams found with the specified parameters.")
+                    filtered_df = st.session_state.results_df
+                
+                # Display filtered results
+                st.dataframe(
+                    filtered_df,
+                    hide_index=True,
+                    column_config={
+                        'N-gram': st.column_config.TextColumn('N-gram'),
+                        'Frequency': st.column_config.NumberColumn('Frequency'),
+                        'Total Cost': st.column_config.NumberColumn(
+                            'Total Cost',
+                            format="$%.2f"
+                        ),
+                        'Total Conversions': st.column_config.NumberColumn('Total Conversions'),
+                        'CPA': st.column_config.NumberColumn(
+                            'CPA',
+                            format="$%.2f"
+                        )
+                    }
+                )
+                
+                # Create visualization with filtered data
+                fig = px.bar(filtered_df.head(20), 
+                           x='N-gram', 
+                           y='CPA',
+                           title=f'Top 20 {n_value}-grams by CPA')
+                fig.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig)
+                
+                # Download filtered results
+                st.download_button(
+                    label="Download filtered results as CSV",
+                    data=filtered_df.to_csv(index=False),
+                    file_name=f"{n_value}-grams_analysis.csv",
+                    mime="text/csv"
+                )
 
 if __name__ == "__main__":
     main()
