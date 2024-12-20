@@ -1,34 +1,15 @@
-import ssl
-
-try:
-    _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass
-else:
-    ssl._create_default_https_context = _create_unverified_https_context
-
-import nltk
-nltk.download('punkt')
-
 import streamlit as st
 import pandas as pd
 from collections import Counter
-import nltk
-from nltk.util import ngrams
 import plotly.express as px
-
-# Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
+import re
 
 def load_data(uploaded_file):
     """Load and validate the uploaded search terms report."""
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file)
-            required_columns = ['Search term']  # Add other required columns if needed
+            required_columns = ['Search term']
             if not all(col in df.columns for col in required_columns):
                 st.error("Upload error: The file must contain a 'Search term' column")
                 return None
@@ -43,17 +24,19 @@ def preprocess_text(text):
     if pd.isna(text):
         return []
     
-    # Convert to lowercase and tokenize
-    tokens = nltk.word_tokenize(str(text).lower())
-    
-    # Remove punctuation and numbers
-    tokens = [token for token in tokens if token.isalpha()]
+    # Convert to lowercase and split into words
+    text = str(text).lower()
+    # Remove special characters and extra spaces
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+    tokens = text.split()
     
     return tokens
 
 def generate_ngrams(tokens, n):
     """Generate n-grams from the preprocessed tokens."""
-    return list(ngrams(tokens, n))
+    if len(tokens) < n:
+        return []
+    return [' '.join(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
 
 def analyze_ngrams(df, n_value, min_frequency=1):
     """Perform n-grams analysis on the search terms."""
@@ -61,9 +44,8 @@ def analyze_ngrams(df, n_value, min_frequency=1):
     
     for term in df['Search term']:
         tokens = preprocess_text(term)
-        if len(tokens) >= n_value:
-            term_ngrams = generate_ngrams(tokens, n_value)
-            all_ngrams.extend(term_ngrams)
+        term_ngrams = generate_ngrams(tokens, n_value)
+        all_ngrams.extend(term_ngrams)
     
     # Count n-grams frequencies
     ngram_counts = Counter(all_ngrams)
@@ -71,7 +53,7 @@ def analyze_ngrams(df, n_value, min_frequency=1):
     # Convert to DataFrame
     ngram_df = pd.DataFrame([
         {
-            'N-gram': ' '.join(ng),
+            'N-gram': ng,
             'Frequency': count
         }
         for ng, count in ngram_counts.items()
