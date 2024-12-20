@@ -89,6 +89,12 @@ def analyze_ngrams(df, n_value, min_frequency=1):
     else:
         return pd.DataFrame(columns=['N-gram', 'Frequency', 'Total Cost', 'Total Conversions', 'CPA'])
 
+def filter_dataframe(df, search_term):
+    """Filter dataframe based on search term."""
+    if search_term:
+        return df[df['N-gram'].str.contains(search_term.lower(), case=False, na=False)]
+    return df
+
 def main():
     st.title("Search Terms N-grams Analysis")
     
@@ -124,16 +130,23 @@ def main():
                 if len(results_df) > 0:
                     st.header("3. Results")
                     
+                    # Store results in session state
+                    if 'results_df' not in st.session_state:
+                        st.session_state['results_df'] = results_df
+                    
                     # Add search/filter box
-                    search_term = st.text_input("Filter N-grams (case-insensitive)", "")
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        search_term = st.text_input(
+                            "Filter N-grams (case-insensitive)",
+                            key="search_input",
+                            on_change=None
+                        )
                     
                     # Filter results if search term is provided
+                    display_df = filter_dataframe(st.session_state['results_df'], search_term)
                     if search_term:
-                        filtered_df = results_df[results_df['N-gram'].str.contains(search_term.lower(), case=False, na=False)]
-                        display_df = filtered_df
-                        st.write(f"Found {len(filtered_df)} matching n-grams")
-                    else:
-                        display_df = results_df
+                        st.write(f"Found {len(display_df)} matching n-grams")
                     
                     # Display the dataframe
                     st.dataframe(
@@ -164,7 +177,7 @@ def main():
                     
                     # Download results
                     st.download_button(
-                        label="Download results as CSV",
+                        label="Download filtered results as CSV",
                         data=display_df.to_csv(index=False),
                         file_name=f"{n_value}-grams_analysis.csv",
                         mime="text/csv"
