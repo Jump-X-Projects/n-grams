@@ -4,7 +4,6 @@ from collections import Counter
 import plotly.express as px
 import re
 from st_aggrid import AgGrid, GridOptionsBuilder
-from st_aggrid.grid_options_builder import GridOptionsBuilder
 
 def load_data(uploaded_file):
     """Load and validate the uploaded search terms report."""
@@ -62,9 +61,9 @@ def analyze_ngrams(df, n_value, min_frequency=1):
         {
             'N-gram': ng,
             'Frequency': data['frequency'],
-            'Total Cost': data['total_cost'],
+            'Total Cost': round(data['total_cost'], 2),
             'Total Conversions': data['total_conversions'],
-            'CPA': data['total_cost'] / data['total_conversions'] if data['total_conversions'] > 0 else 0
+            'CPA': round(data['total_cost'] / data['total_conversions'], 2) if data['total_conversions'] > 0 else 0
         }
         for ng, data in ngram_data.items()
         if data['frequency'] >= min_frequency
@@ -78,38 +77,30 @@ def analyze_ngrams(df, n_value, min_frequency=1):
 def show_interactive_grid(df):
     """Display an interactive grid with sorting and filtering."""
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(
-        groupable=True,
-        value=True,
-        enableRowGroup=True,
-        editable=False,
-        filterable=True,
-        sortable=True,
-        resizable=True,
-    )
     
-    # Configure specific columns
-    gb.configure_column('N-gram', filter=True, headerCheckboxSelection=True)
-    gb.configure_column('Frequency', type=['numericColumn', 'numberColumnFilter'])
-    gb.configure_column('Total Cost', type=['numericColumn', 'numberColumnFilter'], precision=2)
-    gb.configure_column('Total Conversions', type=['numericColumn', 'numberColumnFilter'])
-    gb.configure_column('CPA', type=['numericColumn', 'numberColumnFilter'], precision=2)
+    # Simpler configuration that should work more reliably
+    gb.configure_column('N-gram', sortable=True, filter=True)
+    gb.configure_column('Frequency', sortable=True, filter=True)
+    gb.configure_column('Total Cost', sortable=True, filter=True)
+    gb.configure_column('Total Conversions', sortable=True, filter=True)
+    gb.configure_column('CPA', sortable=True, filter=True)
     
-    grid_options = gb.build()
+    # Basic grid configuration
+    gb.configure_grid_options(domLayout='normal')
     
-    return AgGrid(
+    grid_response = AgGrid(
         df,
-        gridOptions=grid_options,
+        gridOptions=gb.build(),
+        reload_data=False,
         enable_enterprise_modules=False,
-        allow_unsafe_jscode=True,
-        height=400
+        height=400,
+        fit_columns_on_grid_load=True,
     )
+    
+    return grid_response
 
 def main():
     st.title("Search Terms N-grams Analysis with CPA")
-    
-    # Add requirement for st-aggrid in the UI
-    st.write("Note: This app requires the 'st-aggrid' package. Add it to requirements.txt if not already present.")
     
     # File upload
     st.header("1. Upload Search Terms Report")
@@ -142,7 +133,7 @@ def main():
                     st.header("3. Results")
                     
                     # Display interactive grid
-                    st.subheader("Top N-grams with CPA (Sortable and Filterable)")
+                    st.subheader("Top N-grams with CPA")
                     grid_response = show_interactive_grid(results_df)
                     
                     # Create visualization
