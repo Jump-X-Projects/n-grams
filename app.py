@@ -5,25 +5,30 @@ import plotly.express as px
 import re
 import numpy as np
 
-def load_data(uploaded_file, sample_size=None):
+@st.cache_data
+def load_data(uploaded_file, sample_size=1.0):
     """Load and validate the uploaded search terms report."""
     if uploaded_file is not None:
         try:
-            # Check file size
-            file_size = uploaded_file.size / (1024 * 1024)  # Convert to MB
-            st.write(f"File size: {file_size:.2f} MB")
+            # First count total rows without loading entire file
+            df_count = sum(1 for row in uploaded_file)
+            uploaded_file.seek(0)  # Reset file pointer
             
-            if sample_size:
-                # Read with sampling for large files
-                df = pd.read_csv(uploaded_file, skiprows=lambda x: x>0 and np.random.random() > sample_size)
-                st.info(f"Analyzing a {sample_size*100}% sample of the data due to file size")
+            # If file has more than 100k rows, force sampling
+            if df_count > 100000:
+                if sample_size == 1.0:
+                    sample_size = 0.1  # Default to 10% for large files
+                    st.warning(f"Large file detected ({df_count:,} rows). Using {sample_size*100}% sample for analysis.")
+            
+            # Calculate number of rows to skip for sampling
+            if sample_size < 1.0:
+                skip_rate = int(1/sample_size)
+                df = pd.read_csv(uploaded_file, skiprows=lambda x: x > 0 and x % skip_rate != 0)
             else:
                 df = pd.read_csv(uploaded_file)
             
-            required_columns = ['Search term', 'Cost', 'Conversions']
-            if not all(col in df.columns for col in required_columns):
-                st.error("Upload error: The file must contain 'Search term', 'Cost', and 'Conversions' columns")
-                return None
+            # Clean up memory
+            df = df[['Search term', 'Cost', 'Conversions']].copy()
             
             # Clean and convert Cost column (remove currency symbols and convert to float)
             df['Cost'] = df['Cost'].replace('[\$,]', '', regex=True).astype(float)
@@ -32,80 +37,55 @@ def load_data(uploaded_file, sample_size=None):
             df['Conversions'] = pd.to_numeric(df['Conversions'], errors='coerce').fillna(0)
             
             return df
+            
         except Exception as e:
             st.error(f"Error loading file: {str(e)}")
             return None
     return None
 
 @st.cache_data
-def preprocess_text(text):
-    """Clean and preprocess the search term text."""
-    if pd.isna(text):
-        return []
-    
-    text = str(text).lower()
-    text = re.sub(r'[^a-z0-9\s]', '', text)
-    tokens = text.split()
-    
-    return tokens
-
-def generate_ngrams(tokens, n):
-    """Generate n-grams from the preprocessed tokens."""
-    if len(tokens) < n:
-        return []
-    return [' '.join(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
-
-def analyze_ngrams(df, n_value, min_frequency=1):
-    """Perform n-grams analysis on the search terms with CPA calculations."""
+def process_ngrams_batch(_df, n_value, min_frequency=1):
+    """Process n-grams in an optimized way."""
+    # Combine all processing into a single pass
     ngram_data = {}
-    total_rows = len(df)
     
-    # Create a progress bar
-    progress_bar = st.progress(0)
-    progress_text = st.empty()
-    
-    # Process in chunks
-    chunk_size = 1000
-    for i in range(0, total_rows, chunk_size):
-        chunk = df.iloc[i:i+chunk_size]
-        for _, row in chunk.iterrows():
-            tokens = preprocess_text(row['Search term'])
-            term_ngrams = generate_ngrams(tokens, n_value)
-            
-            for ng in term_ngrams:
+    for _, row in _df.iterrows():
+        # Process text and generate n-grams in one step
+        text = str(row['Search term']).lower()
+        text = re.sub(r'[^a-z0-9\s]', '', text)
+        tokens = text.split()
+        
+        if len(tokens) >= n_value:
+            for i in range(len(tokens) - n_value + 1):
+                ng = ' '.join(tokens[i:i+n_value])
                 if ng not in ngram_data:
-                    ngram_data[ng] = {
-                        'frequency': 0,
-                        'total_cost': 0,
-                        'total_conversions': 0
-                    }
+                    ngram_data[ng] = {'frequency': 0, 'total_cost': 0, 'total_conversions': 0}
                 ngram_data[ng]['frequency'] += 1
                 ngram_data[ng]['total_cost'] += row['Cost']
                 ngram_data[ng]['total_conversions'] += row['Conversions']
-        
-        # Update progress
-        progress = min(i + chunk_size, total_rows) / total_rows
-        progress_bar.progress(progress)
-        progress_text.text(f"Processing rows {i} to {min(i + chunk_size, total_rows)} of {total_rows}")
     
-    progress_bar.empty()
-    progress_text.empty()
+    return ngram_data
+
+def analyze_ngrams(df, n_value, min_frequency=1):
+    """Perform n-grams analysis using batched processing."""
+    # Process in a single batch with optimized function
+    ngram_data = process_ngrams_batch(df, n_value, min_frequency)
     
-    # Convert to DataFrame
-    ngram_df = pd.DataFrame([
-        {
-            'N-gram': ng,
-            'Frequency': data['frequency'],
-            'Total Cost': round(data['total_cost'], 2),
-            'Total Conversions': data['total_conversions'],
-            'CPA': round(data['total_cost'] / data['total_conversions'], 2) if data['total_conversions'] > 0 else 0
-        }
-        for ng, data in ngram_data.items()
-        if data['frequency'] >= min_frequency
-    ])
+    # Convert results to DataFrame
+    results = []
+    for ng, data in ngram_data.items():
+        if data['frequency'] >= min_frequency:
+            results.append({
+                'N-gram': ng,
+                'Frequency': data['frequency'],
+                'Total Cost': round(data['total_cost'], 2),
+                'Total Conversions': data['total_conversions'],
+                'CPA': round(data['total_cost'] / data['total_conversions'], 2) if data['total_conversions'] > 0 else 0
+            })
     
-    if len(ngram_df) > 0:
-        return ngram_df.sort_values('Frequency', ascending=False)
+    if results:
+        results_df = pd.DataFrame(results)
+        return results_df.sort_values('Frequency', ascending=False)
     else:
         return pd.DataFrame(columns=['N-gram', 'Frequency', 'Total Cost', 'Total Conversions', 'CPA'])
 
@@ -118,20 +98,13 @@ def main():
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
     
     if uploaded_file is not None:
-        # Add sampling option for large files
-        file_size = uploaded_file.size / (1024 * 1024)  # Convert to MB
-        sample_size = None
-        if file_size > 100:  # If file is larger than 100MB
-            st.warning("Large file detected. Consider using sampling for faster analysis.")
-            use_sampling = st.checkbox("Use sampling", value=True)
-            if use_sampling:
-                sample_size = st.slider("Sample size (%)", 1, 100, 10) / 100
+        # Sample size selection
+        sample_size = st.slider("Sample size (%)", 1, 100, 10) / 100
         
         df = load_data(uploaded_file, sample_size)
         
         if df is not None:
-            st.success("File uploaded successfully!")
-            st.write(f"Number of search terms: {len(df)}")
+            st.success(f"File loaded successfully! Analyzing {len(df):,} rows")
             
             # N-gram configuration
             st.header("2. Configure Analysis")
@@ -178,25 +151,13 @@ def main():
                     fig.update_layout(xaxis_tickangle=-45)
                     st.plotly_chart(fig)
                     
-                    # Split large downloads into chunks
-                    if len(results_df) > 100000:
-                        st.warning("Large result set detected. Download will be split into chunks.")
-                        chunk_size = 100000
-                        for i in range(0, len(results_df), chunk_size):
-                            chunk = results_df.iloc[i:i+chunk_size]
-                            st.download_button(
-                                label=f"Download results part {i//chunk_size + 1} (rows {i+1}-{min(i+chunk_size, len(results_df))})",
-                                data=chunk.to_csv(index=False),
-                                file_name=f"{n_value}-grams_analysis_part{i//chunk_size + 1}.csv",
-                                mime="text/csv"
-                            )
-                    else:
-                        st.download_button(
-                            label="Download results as CSV",
-                            data=results_df.to_csv(index=False),
-                            file_name=f"{n_value}-grams_analysis.csv",
-                            mime="text/csv"
-                        )
+                    # Download results
+                    st.download_button(
+                        label="Download results as CSV",
+                        data=results_df.to_csv(index=False),
+                        file_name=f"{n_value}-grams_analysis.csv",
+                        mime="text/csv"
+                    )
                 else:
                     st.warning("No n-grams found with the specified parameters.")
 
