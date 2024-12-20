@@ -106,24 +106,6 @@ def main():
                 if len(results_df) > 0:
                     st.header("3. Results")
                     
-                    # Sorting options
-                    sort_column = st.selectbox(
-                        "Sort by",
-                        options=['Frequency', 'Total Cost', 'Total Conversions', 'CPA'],
-                        index=0
-                    )
-                    sort_order = st.radio(
-                        "Sort order",
-                        options=['Descending', 'Ascending'],
-                        horizontal=True
-                    )
-                    
-                    # Sort the dataframe
-                    results_df = results_df.sort_values(
-                        by=sort_column,
-                        ascending=(sort_order == 'Ascending')
-                    )
-                    
                     # Display the dataframe
                     st.dataframe(
                         results_df,
@@ -143,21 +125,11 @@ def main():
                         }
                     )
                     
-                    # Create visualization
-                    st.subheader("Visualization")
-                    metric_options = ['Frequency', 'CPA', 'Total Cost', 'Total Conversions']
-                    selected_metric = st.selectbox("Select metric to visualize", metric_options)
-                    
-                    top_n = st.slider("Select top N results to visualize", 
-                                    min_value=5, 
-                                    max_value=min(50, len(results_df)), 
-                                    value=20)
-                    
-                    plot_data = results_df.head(top_n)
-                    fig = px.bar(plot_data, 
+                    # Create basic visualization
+                    fig = px.bar(results_df.head(20), 
                                x='N-gram', 
-                               y=selected_metric,
-                               title=f'Top {top_n} {n_value}-grams by {selected_metric}')
+                               y='CPA',
+                               title=f'Top 20 {n_value}-grams by CPA')
                     fig.update_layout(xaxis_tickangle=-45)
                     st.plotly_chart(fig)
                     
