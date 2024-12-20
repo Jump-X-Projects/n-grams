@@ -13,6 +13,13 @@ def load_data(uploaded_file):
             if not all(col in df.columns for col in required_columns):
                 st.error("Upload error: The file must contain 'Search term', 'Cost', and 'Conversions' columns")
                 return None
+            
+            # Clean and convert Cost column (remove currency symbols and convert to float)
+            df['Cost'] = df['Cost'].replace('[\$,]', '', regex=True).astype(float)
+            
+            # Clean and convert Conversions column
+            df['Conversions'] = pd.to_numeric(df['Conversions'], errors='coerce').fillna(0)
+            
             return df
         except Exception as e:
             st.error(f"Error loading file: {str(e)}")
